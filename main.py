@@ -204,4 +204,62 @@ async def search_documents(request: SearchRequest):
             score_threshold=0.7
         )
         
-        print(f"Found {len(results)} result
+        print(f"Found {len(results)} results")
+        
+        return {
+            "success": True,
+            "results": [
+                {
+                    "document_id": r.payload["document_id"],
+                    "filename": r.payload["filename"],
+                    "chunk_text": r.payload["chunk_text"],
+                    "chunk_index": r.payload.get("chunk_index", 0),
+                    "score": r.score
+                }
+                for r in results
+            ]
+        }
+        
+    except Exception as e:
+        print(f"Error searching documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Delete document endpoint
+@app.post("/delete")
+async def delete_document(request: DeleteRequest):
+    try:
+        print(f"Deleting document: {request.document_id}")
+        
+        # Delete all points for this document
+        qdrant_client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector={
+                "filter": {
+                    "must": [
+                        {"key": "document_id", "match": {"value": request.document_id}},
+                        {"key": "company_id", "match": {"value": request.company_id}}
+                    ]
+                }
+            },
+            wait=True
+        )
+        
+        print(f"Successfully deleted document {request.document_id}")
+        
+        return {
+            "success": True,
+            "deleted": request.document_id
+        }
+        
+    except Exception as e:
+        print(f"Error deleting document: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Test endpoint
+@app.get("/test")
+def test():
+    return {
+        "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
+        "qdrant_configured": bool(os.getenv("QDRANT_URL") and os.getenv("QDRANT_API_KEY")),
+        "collection": COLLECTION_NAME
+    }
