@@ -21,12 +21,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize clients
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Initialize Qdrant client
 qdrant_client = QdrantClient(
     url=os.getenv("QDRANT_URL"),
     api_key=os.getenv("QDRANT_API_KEY")
 )
+
+# OpenAI client factory (lazy initialization)
+def get_openai_client():
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 COLLECTION_NAME = "knowledge_base"
 
@@ -122,7 +125,8 @@ async def index_document(
         
         # Generate embeddings
         print("Generating embeddings with OpenAI...")
-        embeddings_response = openai_client.embeddings.create(
+        openai = get_openai_client()
+        embeddings_response = openai.embeddings.create(
             model="text-embedding-3-small",
             input=chunks
         )
@@ -174,7 +178,8 @@ async def search_documents(request: SearchRequest):
         print(f"Company: {request.company_id}, Accessible docs: {len(request.accessible_doc_ids)}")
         
         # Generate query embedding
-        embedding_response = openai_client.embeddings.create(
+        openai = get_openai_client()
+        embedding_response = openai.embeddings.create(
             model="text-embedding-3-small",
             input=request.query
         )
