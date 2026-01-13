@@ -7,6 +7,7 @@ import PyPDF2
 import docx
 import io
 import httpx
+import uuid
 from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
@@ -152,11 +153,11 @@ async def index_document(
         
         print(f"Generated {len(embeddings_response.data)} embeddings")
         
-        # Prepare points for Qdrant
+        # Prepare points for Qdrant - USE UUID FOR IDs
         points = []
         for idx, (chunk, embedding_data) in enumerate(zip(chunks, embeddings_response.data)):
             points.append(PointStruct(
-                id=f"{document_id}_{idx}",
+                id=str(uuid.uuid4()),  # ✅ CORRIGIDO: UUID válido em vez de string
                 vector=embedding_data.embedding,
                 payload={
                     "company_id": company_id,
