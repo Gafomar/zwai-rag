@@ -9,7 +9,7 @@ import io
 import httpx
 from openai import OpenAI
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 
 app = FastAPI(title="ZWAI RAG Service")
 
@@ -91,7 +91,7 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
     except Exception as e:
         raise ValueError(f"Text extraction failed: {str(e)}")
 
-# Index document endpoint - NOW ACCEPTS FILE OR FILE_URL
+# Index document endpoint - ACCEPTS FILE OR FILE_URL
 @app.post("/index")
 async def index_document(
     file: Optional[UploadFile] = File(None),
@@ -248,24 +248,27 @@ async def search_documents(request: SearchRequest):
         print(f"Error searching documents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Delete document endpoint
+# Delete document endpoint - CORRECTED
 @app.post("/delete")
 async def delete_document(request: DeleteRequest):
     try:
         print(f"Deleting document: {request.document_id}")
         
-        # Delete all points for this document
+        # Delete all points for this document using proper Filter syntax
         qdrant_client.delete(
             collection_name=COLLECTION_NAME,
-            points_selector={
-                "filter": {
-                    "must": [
-                        {"key": "document_id", "match": {"value": request.document_id}},
-                        {"key": "company_id", "match": {"value": request.company_id}}
-                    ]
-                }
-            },
-            wait=True
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(value=request.document_id)
+                    ),
+                    FieldCondition(
+                        key="company_id",
+                        match=MatchValue(value=request.company_id)
+                    )
+                ]
+            )
         )
         
         print(f"Successfully deleted document {request.document_id}")
