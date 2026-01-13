@@ -2,10 +2,11 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-from typing import List
+from typing import List, Optional
 import PyPDF2
 import docx
 import io
+import httpx
 from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
@@ -90,22 +91,40 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
     except Exception as e:
         raise ValueError(f"Text extraction failed: {str(e)}")
 
-# Index document endpoint
+# Index document endpoint - NOW ACCEPTS FILE OR FILE_URL
 @app.post("/index")
 async def index_document(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    file_url: Optional[str] = Form(None),
     document_id: str = Form(...),
     company_id: str = Form(...)
 ):
     try:
-        print(f"Indexing document: {file.filename} (ID: {document_id})")
+        print(f"Indexing document ID: {document_id}")
         
-        # Read file
-        file_bytes = await file.read()
-        print(f"File size: {len(file_bytes)} bytes")
+        # Get file bytes - either from upload or download from URL
+        if file:
+            file_bytes = await file.read()
+            filename = file.filename
+            print(f"File uploaded: {filename}, size: {len(file_bytes)} bytes")
+            
+        elif file_url:
+            print(f"Downloading file from: {file_url}")
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(file_url)
+                response.raise_for_status()
+                file_bytes = response.content
+                # Extract filename from URL (remove query params)
+                filename = file_url.split('/')[-1].split('?')[0]
+                if not filename or '.' not in filename:
+                    filename = 'document.pdf'  # Default
+            print(f"Downloaded: {filename}, size: {len(file_bytes)} bytes")
+            
+        else:
+            raise ValueError("Either 'file' or 'file_url' must be provided")
         
         # Extract text
-        text = extract_text(file_bytes, file.filename)
+        text = extract_text(file_bytes, filename)
         print(f"Extracted text: {len(text)} characters")
         
         if len(text) < 50:
@@ -142,7 +161,7 @@ async def index_document(
                 payload={
                     "company_id": company_id,
                     "document_id": document_id,
-                    "filename": file.filename,
+                    "filename": filename,
                     "chunk_text": chunk,
                     "chunk_index": idx,
                     "total_chunks": len(chunks)
